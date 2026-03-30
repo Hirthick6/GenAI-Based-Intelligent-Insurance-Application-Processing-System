@@ -1,41 +1,100 @@
 version: '3.8'
 
-# Production override for docker-compose.yml
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Production deployment file
+# Usage:
+#   BACKEND_IMAGE=your-dockerhub-user/tce-backend:latest \
+#   FRONTEND_IMAGE=your-dockerhub-user/tce-frontend:latest \
+#   docker compose -f docker-compose.prod.yml up -d
 
 services:
-  backend:
+  database:
+    image: postgres:15-alpine
+    container_name: tce-database
     restart: always
+    env_file:
+      - .env
     environment:
+      POSTGRES_DB: ${DB_NAME:-tce_project}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: postgres -c max_connections=200 -c shared_buffers=256MB
+    networks:
+      - tce-network
+
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
+    container_name: tce-backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@database:5432/${DB_NAME:-tce_project}
+      IMAP_SERVER: ${IMAP_SERVER:-imap.gmail.com}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_EMAIL: ${IMAP_EMAIL}
+      IMAP_PASSWORD: ${IMAP_PASSWORD}
+      IMAP_FOLDER: ${IMAP_FOLDER:-INBOX}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GENAI_PROVIDER: ${GENAI_PROVIDER:-groq}
+      TESSERACT_CMD: /usr/bin/tesseract
+      UPLOAD_DIR: /app/uploads
+      PROCESSED_DIR: /app/processed
+      HOST: 0.0.0.0
+      PORT: 8000
       DEBUG: "false"
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '1'
-          memory: 1G
+      JWT_SECRET: ${JWT_SECRET:-change-this-before-production}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 1440
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_processed:/app/processed
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tce-network
 
   frontend:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE must be set}
+    container_name: tce-frontend
     restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - tce-network
 
-  database:
-    restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '1'
-          memory: 1G
-    command: postgres -c max_connections=200 -c shared_buffers=256MB
+volumes:
+  postgres_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  backend_processed:
+    driver: local
+
+networks:
+  tce-network:
+    driver: bridge

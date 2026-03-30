@@ -60,9 +60,12 @@ pipeline {
 
     stage('Deploy') {
       steps {
-        sshagent(credentials: ['deploy-server-ssh']) {
+        withCredentials([sshUserPrivateKey(credentialsId: 'deploy-server-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'DEPLOY_USER')]) {
           sh '''
-            ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "
+            mkdir -p ~/.ssh
+            chmod 700 ~/.ssh
+            ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+            ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST" "
               cd $DEPLOY_PATH/docker &&
               BACKEND_IMAGE=$BACKEND_REPO:latest \
               FRONTEND_IMAGE=$FRONTEND_REPO:latest \
