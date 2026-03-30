@@ -1,0 +1,18 @@
+# Keep the Docker build context small and platform-safe
+
+.git/
+.idea/
+.vscode/
+
+**/node_modules/
+**/dist/
+**/.vite/
+**/__pycache__/
+**/*.py[cod]
+
+*.log
+*.md
+!README.md
+
+backend/.env
+docker/.env
