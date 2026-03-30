@@ -6,9 +6,6 @@ pipeline {
     BACKEND_REPO = "${DOCKERHUB_USER}/tce-backend"
     FRONTEND_REPO = "${DOCKERHUB_USER}/tce-frontend"
     IMAGE_TAG = "${env.BUILD_NUMBER}"
-    DEPLOY_HOST = 'your-server-hostname-or-ip'
-    DEPLOY_USER = 'deploy'
-    DEPLOY_PATH = '/opt/tce-project'
   }
 
   stages {
@@ -53,27 +50,6 @@ pipeline {
             docker push $BACKEND_REPO:latest
             docker push $FRONTEND_REPO:$IMAGE_TAG
             docker push $FRONTEND_REPO:latest
-          '''
-        }
-      }
-    }
-
-    stage('Deploy') {
-      steps {
-        withCredentials([sshUserPrivateKey(credentialsId: 'deploy-server-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'DEPLOY_USER')]) {
-          sh '''
-            mkdir -p ~/.ssh
-            chmod 700 ~/.ssh
-            ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-            ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST" "
-              cd $DEPLOY_PATH/docker &&
-              BACKEND_IMAGE=$BACKEND_REPO:latest \
-              FRONTEND_IMAGE=$FRONTEND_REPO:latest \
-              docker compose -f docker-compose.prod.yml pull &&
-              BACKEND_IMAGE=$BACKEND_REPO:latest \
-              FRONTEND_IMAGE=$FRONTEND_REPO:latest \
-              docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            "
           '''
         }
       }
