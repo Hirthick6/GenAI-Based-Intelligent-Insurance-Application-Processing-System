@@ -2,7 +2,7 @@
 # Multi-stage build: Build with Node, serve with Nginx
 
 # Stage 1: Build the React application
-FROM node:18-alpine as build
+FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ WORKDIR /app
 COPY frontend/package*.json ./
 
 # Install dependencies
-RUN npm ci --silent
+RUN npm ci --silent --no-audit --no-fund
 
 # Copy source code
 COPY frontend/ .
